@@ -1,0 +1,771 @@
+---
+title: "Assignment 5"
+author: "Allison Byron"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# The Question
+
+How to improve Hometown Bank's status in the term deposit market?
+
+My goal is to understand how to increase the number of people who subscribe a term deposit in future marketing campaigns by studying the characteristics of people who have subscribed a term deposit in a past campaign. By identifying the key characteristics that affect if a customer subscribes a deposit or not, the effectiveness of future marketing campaigns can be increased.
+
+Prediction Goals Outlined:
+*To build a model to predict whether a bank customer is likely to subscribe a term deposit*
+*To identify predictors that explain if a bank customer is more likely to subscribe a term deposit*
+
+In predicting term deposit subscribers, I will be evaluating the performances of the following supervised learning algorithms: decision tree classification model, k-nearest neighbor (knn) classification model and logistic regression. I will also examine a random forest ensemble model. I am using supervised learning approaches because this method predicts categorical class labels (ex. if a customer subscribes a term deposit or not).
+
+
+# The Dataset
+
+```{r}
+setwd("M:/Rockhurst/BIA 6301/Assignment 5")
+bank<-read.csv("bank-full.csv")
+```
+
+*Dataset of 45,211 bank records*
+
+This dataset is related to the direct marketing campaign of Hometown Bank. Hometown Bank's marketing campaign was based on phone calls. 
+
+17 characteristics are reported for each record -
+
+age (number)
+job (category)
+marital (category): marital status
+education (category)
+default (binary): has credit in default?
+balance (number): average yearly balance (in euros)
+housing (binary): has housing loan?
+loan (binary): has personal loan? 
+contact (category): contact communication type
+day (number): last contact day of the month
+month (category): last contact month of year
+duration (number): last contact duration (in seconds)
+campaign (number): number of contacts performed during this campaign and for this client (includes last contact) 
+pdays (number): number of days that passed by after the client was contacted from a previous campaign (-1 means client was not previously contacted)
+previous (number): number of contacts performed before this campaign and for this client
+poutcome (category): outcome of the previous marketing campaign
+y (binary): output variable (desired target) - has the client subscribed a term deposit?
+
+Source: Elsalamony, Hany (2014). Bank direct marketing analysis of data mining techniques. International Journal of Computer Applications 85(7): 12-22.  
+
+
+```{r}
+str(bank)
+
+summary(bank)
+
+dim(bank)
+
+names(bank)
+```
+In this dataset, the average customer is 41 years old and the most-common jobs are blue-collar and management positions. Married customers accounted for 60% of the phone calls while over half of the phone calls were to customers with a secondary education. Almost all customers did not have credit in default and most did not have a personal loan (84%). The average yearly balance is between -8,019 and 102,127 euros, and I find it interesting that there are negative balances listed. 
+
+
+```{r}
+table(bank$poutcome)
+prop.table(table(bank$poutcome))
+```
+I find the poutcome variable to not be as relevant because 82% of the records list 'unknown' as their outcome of the previous campaign.
+
+
+```{r}
+table(bank$y)
+prop.table(table(bank$y))
+```
+11.7% subscribed a term deposit while 88.3% did not subscribe.
+
+
+```{r}
+hist(bank$age)
+hist(bank$duration)
+hist(bank$balance)
+hist(bank$campaign)
+hist(bank$pdays)
+hist(bank$previous)
+```
+The distribution of the contact duration is right-skewed. The majority of contact phone calls were between 0 and 500 seconds (0-8 minutes).
+
+
+# Creating a Training and Test Set by Randomizing Observations
+
+Dataset divided into two subsets: training set and a test set. Training set used to "train" our decision tree model. Then, this model is used to predict the observations in our test set to gauge the performance of our prediction model. 
+
+Dataset split into 80-20 (80% training and 20% test sets).
+
+```{r}
+set.seed(123) #set a seed to do draws from a random uniform distribution.
+bank_rand <- bank[order(runif(45211)), ] 
+bank_train <- bank_rand[1:36168, ] #Training data set; 36168 observations - 80%
+bank_test  <-bank_rand[36169:45211, ] #Test data set; 9043 observations - 20%
+```
+
+
+# 1st Model: Decision Tree - 'Gini' splitting criterion
+
+The Decision Tree machine learning method is a powerful classifer that makes complex decisions from sets of simple choices. This method presents the information in the form of a tree structure that can be easily understood. Decision trees follow recursive partitioning (top down greedy divide and conquer approach), partitioning data into interesting segments. The attribute chosen as the most predictive of the target variable is the first split. Observations are continually divided into groups of distinct values where the variable with the most prediction power is chosen before splitting again into another set of branches. The structure of branching decisions used then channels into a final predicted class value. 
+(Lantz 2013, p. 126)
+
+'Gini' splitting criterion favors larger partitions and is very simple to implement.
+
+
+*Using rpart to build a Decision Tree*
+```{r}
+library(rpart)
+set.seed(123)
+bank_rpart <- rpart(bank_train$y~., method="class", parms = list(split="gini"), data=bank_train)
+
+#method="class" --> categorical (yes/no) 
+```
+
+### Root, Nodes, and Leaves
+
+```{r}
+summary(bank_rpart)
+```
+
+### Visualizing the Gini Decision Tree
+```{r}
+# Visual #1
+plot(bank_rpart, uniform=TRUE, main="Classification Tree (Gini) for Bank Dataset")
+text(bank_rpart, use.n=TRUE, all=TRUE, cex=0.8)
+
+# Visual #2
+library(rpart.plot)
+rpart.plot(bank_rpart, type=0, extra=101)
+prp(bank_rpart)
+
+# Visual #3
+library(party)
+library(partykit)
+bank_party<-as.party(bank_rpart)
+plot(bank_party)
+```
+In this model, the data has been divided up into 6 classes (in nodes labeled 3, 5, 6, 9, 10, 11). The most important variable out of 16 predictors is 'duration' in helping to classify the bank clients as term deposit subscribers or non-subscribers. At the highest level, the data is divided into two categories according to the contact duration: either less than 473 seconds or greater than or equal to 473 seconds.
+
+Classification Rules from 'Gini' Decision Tree:
+
+1. If the contact duration is less than 473 seconds, the previous marketing campaign outcome was a success, and the contact duration is greater than or equal to 132 seconds, then the client is 70% likely to subscribe a term deposit. Of the customers that fit these criteria in our dataset, approximately 563 clients did subscribe.
+
+2. If the contact duration is greater than or equal to 801 seconds, then the client is 60% likely to subscribe a term deposit. Of the customers that fit this criteria in our dataset, approximately 932 clients did subscribe.
+
+3. If the contact duration is greater or equal to 473 seconds and less than 801 seconds, and the previous marketing campaign outcome was a success, then the client is 80% likely to subscribe a term deposit. Of the customers that fit these criteria in our dataset, approximately 127 clients did subscribe.
+
+4. If the contact duration is greater or equal to 473 seconds and less than 801 seconds, and the previous marketing campaign outcome was either a failure, other, or unknown, then the client is 30% likely to subscribe a term deposit. Of the customers that fit these criteria in our dataset, approximately 917 clients did subscribe.
+
+
+## Evaluating Model Performance - 'Gini' Decision Tree
+
+```{r}
+library(caret)
+actual <- bank_test$y
+predicted <- predict(bank_rpart, bank_test, type="class")
+results.matrix <- confusionMatrix(predicted, actual, positive="yes")
+print(results.matrix)
+```
+True positives (TP) = 369
+*369 cases in which we predicted yes (subscribed a term deposit), and the clients did subscribe a term deposit.*
+
+True negatives (TN) = 7,754 
+*7,754 cases where we predicted no (did not subscribe a term deposit), and the clients did subscribe a term deposit.*
+
+False positives (FP) = 237 
+*237 cases where we predicted yes (subscribed a term deposit), and the clients did not actually subscribe a term deposit.*
+
+False negatives (FN) = 683 
+*683 cases where we predicted no (did not subscribe a term deposit), and the clients actually did subscribe a term deposit.*
+
+Accuracy = 89.8%
+*Overall, the classifier is correct 89.83% of the time.*
+
+Sensitivity = 35.1%
+*When a client actually did subscribe a term deposit, our model predicts yes (subscribed a term deposit) 35.1% of the time*
+
+Specificity = 97%
+*When a client actually did not subscribe a term deposit, our model predicts no (did not subscribe a term deposit) 97% of the time*
+
+The rate of correctly classified negative (specificity) is very high (97%), which demonstrates that this model does well in predicting when a client does not subscribe a term deposit. The ratio of the number of correctly classified cases (accuracy) is fairly high as well (89.8%). However, the rate of correctly classified positive (sensitivity) is not as high as I would have hoped, where our model predicts yes 35.1% of the time when a client actually does subscribe.
+
+
+## Visualizing Cross Validation Results of 'Gini' Decision Tree
+
+```{r}
+cptable<-printcp(bank_rpart)
+cptable
+plotcp(bank_rpart, minline=TRUE, col="red") 
+```
+
+### Prune 'Gini' Decision Tree
+
+```{r}
+Pruned_bank_rpart <-prune(bank_rpart,cp=.03) #Change the cp and see what happens.
+
+plot(Pruned_bank_rpart, uniform=TRUE,main="'Gini' Classification Tree for Bank")
+text(Pruned_bank_rpart, use.n=TRUE, all=TRUE, cex=.8)
+
+rpart.plot(Pruned_bank_rpart, type=1, extra=101)
+
+Pruned_bank_party<-as.party(Pruned_bank_rpart)
+plot(Pruned_bank_party)
+```
+
+## Visualizing Cross Validation Results of Pruned 'Gini' Decision Tree
+
+```{r}
+actual <- bank_test$y
+predicted <- predict(Pruned_bank_rpart, bank_test, type="class")
+results.matrix <- confusionMatrix(predicted, actual, positive="yes")
+print(results.matrix)
+```
+True positives (TP) = 360
+*360 cases in which we predicted yes (subscribed a term deposit), and the clients did subscribe a term deposit.*
+
+True negatives (TN) = 7,721 
+*7,721 cases where we predicted no (did not subscribe a term deposit), and the clients did subscribe a term deposit.*
+
+False positives (FP) = 270 
+*270 cases where we predicted yes (subscribed a term deposit), and the clients did not actually subscribe a term deposit.*
+
+False negatives (FN) = 692 
+*692 cases where we predicted no (did not subscribe a term deposit), and the clients actually did subscribe a term deposit.*
+
+Accuracy = 89.4%
+*Overall, the classifier is correct 89.4% of the time.*
+
+Sensitivity = 34.2%
+*When a client actually did subscribe a term deposit, our model predicts yes (subscribed a term deposit) 34.2% of the time*
+
+Specificity = 96.6%
+*When a client actually did not subscribe a term deposit, our model predicts no (did not subscribe a term deposit) 6.6% of the time*
+
+Since the pruned tree slightly under performed compared to the non-pruned tree, I will be using my first decision tree model's (non-pruned) results when providing my final recommendations.
+
+
+
+# 2nd Model - k-Nearest Neighbor (kNN): A Lazy Classification Model
+
+The kNN model uses the principle that data is classified by placing it in the same category as similar or "nearest" neighbors. Neighbors are compared using distance, where the most common way to measure distance is by the shortest direct route, also known as "Euclidean distance". The kNN algorithm is simple yet effective.
+(Lantz 2013, p. 65)
+
+*How many neighbors (k)?*
+When choosing the number of k, it should be considered that a large k reduces the variance caused by noisy data, but it can cause bias in that we risk ignoring small and important patterns. 
+(Lantz 2013, p. 71)
+
+
+## Data transformation / Cleaning the data
+
+*kNN requires data transformation into a standard range*
+
+```{r}
+bank_train_knn <- bank_train
+bank_test_knn <- bank_test
+```
+
+
+Create dummy variables for 'job':
+```{r}
+job = factor(bank_train_knn$job)
+dummies = model.matrix(~job-1)
+bank_train_knn <- cbind(bank_train_knn,dummies)
+bank_train_knn <- bank_train_knn[-2]
+```
+
+```{r}
+job = factor(bank_test_knn$job)
+dummies = model.matrix(~job-1)
+bank_test_knn <- cbind(bank_test_knn,dummies)
+bank_test_knn <- bank_test_knn[-2]
+```
+
+
+Create dummy variables for 'marital':
+```{r}
+marital = factor(bank_train_knn$marital)
+dummies2 = model.matrix(~marital-1)
+bank_train_knn <- cbind(bank_train_knn,dummies2)
+bank_train_knn <- bank_train_knn[-2]
+```
+
+```{r}
+marital = factor(bank_test_knn$marital)
+dummies2 = model.matrix(~marital-1)
+bank_test_knn <- cbind(bank_test_knn,dummies2)
+bank_test_knn <- bank_test_knn[-2]
+```
+
+
+Create dummy variables for 'education':
+```{r}
+education = factor(bank_train_knn$education)
+dummies3 = model.matrix(~education-1)
+bank_train_knn <- cbind(bank_train_knn,dummies3)
+bank_train_knn <- bank_train_knn[-2]
+```
+
+```{r}
+education = factor(bank_test_knn$education)
+dummies3 = model.matrix(~education-1)
+bank_test_knn <- cbind(bank_test_knn,dummies3)
+bank_test_knn <- bank_test_knn[-2]
+```
+
+
+Create dummy variables for 'contact':
+```{r}
+contact = factor(bank_train_knn$contact)
+dummies4 = model.matrix(~contact-1)
+bank_train_knn <- cbind(bank_train_knn,dummies4)
+bank_train_knn <- bank_train_knn[-6]
+```
+
+```{r}
+contact = factor(bank_test_knn$contact)
+dummies4 = model.matrix(~contact-1)
+bank_test_knn <- cbind(bank_test_knn,dummies4)
+bank_test_knn <- bank_test_knn[-6]
+```
+
+
+Create dummy variables for 'poutcome':
+```{r}
+poutcome = factor(bank_train_knn$poutcome)
+dummies5 = model.matrix(~poutcome-1)
+bank_train_knn <- cbind(bank_train_knn,dummies5)
+bank_train_knn <- bank_train_knn[-12]
+```
+
+```{r}
+poutcome = factor(bank_test_knn$poutcome)
+dummies5 = model.matrix(~poutcome-1)
+bank_test_knn <- cbind(bank_test_knn,dummies5)
+bank_test_knn <- bank_test_knn[-12]
+```
+
+
+Create dummy variables for 'month':
+```{r}
+month = factor(bank_train_knn$month)
+dummies6 = model.matrix(~month-1)
+bank_train_knn <- cbind(bank_train_knn,dummies6)
+bank_train_knn <- bank_train_knn[-7]
+```
+
+```{r}
+month = factor(bank_test_knn$month)
+dummies6 = model.matrix(~month-1)
+bank_test_knn <- cbind(bank_test_knn,dummies6)
+bank_test_knn <- bank_test_knn[-7]
+```
+
+
+```{r}
+#Rearranging the columns so that our target variable is first
+bank_train_knn <- bank_train_knn[,c(11,1:10,12:49)]
+bank_test_knn<-bank_test_knn[,c(11,1:10,12:49)]
+```
+
+```{r}
+bank_train_knn$defaultyes <-ifelse(bank_train_knn$default=="yes",1,0) #if default = yes, 1; if Not, 0.
+bank_train_knn<-bank_train_knn[,-3] #We do not need the default variable anymore.
+
+bank_test_knn$defaultyes <-ifelse(bank_test_knn$default=="yes",1,0) #if default = yes, 1; if Not, 0.
+bank_test_knn<-bank_test_knn[,-3] #We do not need the default variable anymore.
+```
+
+```{r}
+bank_train_knn$housingyes <-ifelse(bank_train_knn$housing=="yes",1,0)
+bank_train_knn<-bank_train_knn[,-4] 
+
+bank_test_knn$housingyes <-ifelse(bank_test_knn$housing=="yes",1,0) 
+bank_test_knn<-bank_test_knn[,-4] 
+```
+
+```{r}
+bank_train_knn$loanyes <-ifelse(bank_train_knn$loan=="yes",1,0) 
+bank_train_knn<-bank_train_knn[,-4] 
+
+bank_test_knn$loanyes <-ifelse(bank_test_knn$loan=="yes",1,0) 
+bank_test_knn<-bank_test_knn[,-4] 
+```
+
+```{r}
+names(bank_train_knn)
+names(bank_test_knn)
+```
+
+
+## Min-Max Normalization
+
+Breakdown of the 49 variables:
+
+Column 1: target variable 
+Columns 2-8: phone call detail variables
+Columns 9-49: dummy variables
+
+Need to do min-max normalization for columns 2-7 and then add that with our other columns (already on the 0-1 scale).
+
+```{r}
+customers_train<-bank_train_knn[,2:8]
+normalize<- function(x){return((x-min(x))/(max(x)-min(x)))}
+customers_train_n<-as.data.frame(lapply(customers_train, normalize))
+```
+
+```{r}
+customers_test<-bank_test_knn[,2:8]
+normalize2<- function(x){return((x-min(x))/(max(x)-min(x)))}
+customers_test_n<-as.data.frame(lapply(customers_test, normalize2))
+```
+
+
+```{r}
+# Check to see if normalization was done correctly
+summary(customers_train$balance) 
+summary(customers_train_n$balance) 
+```
+
+
+```{r}
+# Combine the normalized variables with our dummy variables and the target variable.
+bank_train_n<-cbind(bank_train_knn[,c(1,9:49)], customers_train_n[,])
+bank_train_n<-bank_train_n[complete.cases(bank_train_n),]
+
+bank_test_n<-cbind(bank_test_knn[,c(1,9:49)], customers_test_n[,])
+bank_test_n<-bank_test_n[complete.cases(bank_test_n),]
+```
+
+
+## Train and Test Sets
+
+*Same training and test set used in Decision Tree model*
+Dataset divided into two subsets: training set and a test set. Training set used to "train" our kNN model. Then, this model is used to predict the observations in our test set to gauge the performance of our prediction model. 
+
+Dataset split into 80-20 (80% training and 20% test sets). 
+
+```{r}
+bank_train_n_knn <- bank_train_n[1:36168,2:49]
+bank_test_n_knn <- bank_test_n[1:9043,2:49]
+
+bank_train_n_labels<-bank_train_n[1:36168,1]
+bank_test_n_labels<-bank_test_n[1:9043,1]
+```
+
+
+* Using the **class** package to perform kNN.  
+Suggestion: start with k = square root of the number of observations & using an odd k. 
+sqrt(45211) = 213.
+
+```{r}
+library(class)
+set.seed(123)
+bank_pred_knn<-knn(train=bank_train_n_knn, test=bank_test_n_knn, cl=bank_train_n_labels, k=21)
+# k = 213 takes a long time to run, so I went with a smaller k
+```
+
+
+## Evaluating kNN Model Performance
+
+A positive case in dataset as a client who subscribed a term deposit. A negative case is a client who did not.
+```{r}
+library(gmodels)
+
+CrossTable(x=bank_test_n_labels, y=bank_pred_knn, prob.chisq=FALSE)
+```
+
+```{r}
+TP = 178
+TN = 7907
+FP = 84
+FN = 874
+
+Sensitivity = TP/(TP+FN) #true positive rate; recall; TP/(TP+FN)
+Specificity = TN/(TN+FP) #how often is the prediction negative when actual is negative?
+Precision = TP/(TP+FP) #how often is prediction positive when actual is positive?
+Accuracy = (TP+TN)/(TP+TN+FP+FN) #how often is classifier correct
+
+Value<-round(c(TP,TN,FP,FN,Sensitivity,Specificity,Precision,Accuracy),digits=3)
+Measure<-c("True Positive","True Negative","False Positive","False Negative","Sensitivity/Recall=TP/(TN+FP)",
+         "Specificity=TN/(TN+TP)","Precision=TP/(TP+FP)","Accuracy=(TP+TN)/total")
+
+table<-as.data.frame(cbind(Measure,Value))
+
+library(knitr)
+
+kable(table)
+```
+True positives (TP) = 178
+*178 cases in which we predicted yes (subscribed a term deposit), and the clients did subscribe a term deposit.*
+
+True negatives (TN) = 7,907 
+*7,907 cases where we predicted no (did not subscribe a term deposit), and the clients did subscribe a term deposit.*
+
+False positives (FP) = 84 
+*84 cases where we predicted yes (subscribed to term deposit), and the clients did not actually subscribe a term deposit.*
+
+False negatives (FN) = 874
+*874 cases where we predicted no (did not subscribe to term deposit), and the clients actually did subscribe to a term deposit.*
+
+Accuracy = 89.4%
+*Overall, the classifier is correct 89.4% of the time.*
+
+Sensitivity = 16.9%
+*When a client actually did subscribe a term deposit, our model predicts yes (subscribed a term deposit) 16.9% of the time*
+
+Specificity = 98.9%
+*When a client actually did not subscribe a term deposit, our model predicts no (did not subscribe a term deposit) 98.9% of the time*
+
+The rate of correctly classified negative (specificity) is very high (98.9%), which demonstrates that this model does extremely well in predicting when a client does not subscribe a term deposit. The ratio of the number of correctly classified cases (accuracy) is high as well (89.4%). However, the rate of correctly classified positive (sensitivity) is fairly low, especially compared to the sensitivity rate in our decision tree model. This sensitivity indicates that our model predicts yes 16.9% of the time when a client actually does subscribe.
+
+
+
+# Model #3 - Logistic Regression
+
+Logistic regression is used to model a binary categorical outcome, in our case, the 'y' variable which indicates if the client has subscribed a term deposit. Maximum likelihood is used to fit the logistic regression, where our goal is to have estimates for betas so that the predicted predicted probability corresponds strongly to the observed data.
+
+
+### Logit Model
+
+```{r}
+bank_train_logit<-bank_train
+
+bank_train_logitmodel <- glm(y~., data=bank_train_logit, family=binomial()) #Fit a logistic regression
+
+summary(bank_train_logitmodel) #coefficients are presented as log-odds (probabilities on logit scale)
+```
+The variables that best explain if a client subscribes a term deposit are: 
+*jobblue-collar, jobhousemaid, jobstudent, educationtertiary, housingyes, loanyes, contactunknown, day, month, duration, campaign, poutcomesuccess*
+
+
+Reduced logit model: 
+```{r}
+bank_train_logitmodel_reduced <- glm(y~job+education+housing+loan+contact+day+month+duration+campaign+poutcome, data=bank_train_logit, family=binomial()) #Fit a logistic regression
+summary(bank_train_logitmodel_reduced) #coefficients are presented as log-odds (probabilities on logit scale)
+```
+The variables that best explain if a client subscribes a term deposit are: 
+*jobblue-collar, jobhousemaid, jobstudent, educationtertiary, housingyes, loanyes, contactunknown, day, monthaug, monthdec, monthjan, monthjul, monthjun, monthmar, monthmay, monthnov, monthoct, monthsep, duration, campaign, poutcomesuccess*
+
+
+```{r}
+exp(cbind(Odds_Ratio=coef(bank_train_logitmodel_reduced))) #Change log odds into odds ratios. 
+```
+The odds above imply that the odds of a client subscribing increases by 10 when the client has had a successful outcome in a previous marketing campaign. If the clients last contact month of the year was March, the odds of a client subscribing is 2 times higher than other months in the year.
+
+
+### Statistical Significance of Reduced Logit Model
+
+Use anova to determine if the model is statistically significant. Residual deviance should be decreasing with each additional predictor added to the model. Possibly exclude predictors if the addition of a predictor does not decrease the residual deviance by much.
+
+```{r}
+anova(bank_train_logitmodel_reduced,test="Chisq") 
+```
+
+
+### Validate model
+
+```{r}
+bank_test_logit <- bank_test[,c(2,4,7,8,9,10,11,12,13,16,17)]
+
+fitted.results <- predict(bank_train_logitmodel_reduced, newdata=bank_test_logit,type='response') # convert into probabilities
+```
+
+```{r}
+misClassificationError <- mean(fitted.results !=bank_test_logit$y)
+print(paste('Accuracy',1-misClassificationError))
+```
+
+#### Confusion Matrix
+
+```{r}
+library(caret)
+#confusionMatrix(data=fitted.results, reference=bank_test_logit$y)
+```
+
+
+
+```{r}
+#fitted values
+LOGITS_bank_train<-predict(bank_train_logitmodel_reduced)
+#Run the regression, then... steps
+#STEP 1 - ln[odds]=logit
+LOGITS_bank_train<-data.frame(predict(bank_train_logitmodel_reduced))
+
+#STEP 2 - anti-log    (e = exp)
+ODDS_bank_train<-exp(LOGITS_bank_train)
+ODDS_bank_train<-data.frame(exp(LOGITS_bank_train))
+
+#STEP 3 - transform into probabilities
+PROBABILITY_bank_train<-(ODDS_bank_train/(1+ODDS_bank_train))
+PROBABILITY_bank_train<-data.frame((ODDS_bank_train/(1+ODDS_bank_train)))
+```
+
+```{r}
+library(psych)
+
+describe(PROBABILITY_bank_train)
+#look at min and max values - bounds (limit cannot be lower than 0)
+#also look at the mean - it should be close to 50%
+#most important-min and max in describe - have got to be between 0 and 100% - otherwise not a good model
+```
+Logistic Regression Overview: I ran into some issues when validating my model. I will have to take additional time to review and investigate further. 
+
+
+
+# 4th Model: Random Forest
+
+Random forests consider only a subset of the predictors at each split. The node splits are not dominated by one or a few strong predictors, which allows more chances for other predictors to be used. More reliable results are achieved when the resulting trees are averaged beacuse the individual trees are not dominated by a few strong predictors.
+
+
+### Create a Training and Test Set
+```{r}
+library(caret)
+library(randomForest)
+
+#set.seed(123)
+#trainIndex = createDataPartition(bank$y, p = 0.8, list = FALSE, times = 1)
+#head(trainIndex)
+
+#bank_train_caret = bank[trainIndex, ]
+#bank_validate_caret = bank[-trainIndex, ]
+```
+
+```{r}
+bank_train_caret <- bank_train
+bank_validate_caret <- bank_test
+```
+
+
+### 1st Random Forest Model
+
+*3 predictors at a time & 500 trees created*
+
+```{r}
+bank_RForest = randomForest(y ~ ., data = bank_train_caret, mtry = 3, ntree = 500, na.action = na.omit, importance = TRUE)
+# default to try 3 predictors at a time and create 500 trees
+print(bank_RForest)
+```
+
+```{r}
+importance(bank_RForest)
+```
+
+```{r}
+varImpPlot(bank_RForest)
+```
+The 'Accuracy' variables that best explain if a client subscribes a term deposit are: 
+*duration, month, day, poutcome*
+
+The 'Gini' variables that best explain if a client subscribes a term deposit are: 
+*duration, month, balance, age, day, poutcome*
+
+```{r}
+actual <- bank_validate_caret$y 
+bank_predicted <- predict(bank_RForest, newdata=bank_validate_caret, type="class") 
+bank_results.matrix.rf <- confusionMatrix(bank_predicted, actual, positive="yes") 
+print(bank_results.matrix.rf)
+```
+True positives (TP) = 441
+*441 cases in which we predicted yes (subscribed a term deposit), and the clients did subscribe a term deposit.*
+
+True negatives (TN) = 7,738 
+*7,738 cases where we predicted no (did not subscribe a term deposit), and the clients did subscribe a term deposit.*
+
+False positives (FP) = 253 
+*253 cases where we predicted yes (subscribed a term deposit), and the clients did not actually subscribe a term deposit.*
+
+False negatives (FN) = 611 
+*611 cases where we predicted no (did not subscribe a term deposit), and the clients actually did subscribe a term deposit.*
+
+Accuracy = 90.45%
+*Overall, the classifier is correct 90.45% of the time.*
+
+Sensitivity = 41.9%
+*When a client actually did subscribe a term deposit, our model predicts yes (subscribed a term deposit) 41.9% of the time*
+
+Specificity = 96.8%
+*When a client actually did not subscribe a term deposit, our model predicts no (did not subscribe a term deposit) 97% of the time*
+
+The rate of correctly classified negative (specificity) is very high (97%), which demonstrates that this model does well in predicting when a client does not subscribe a term deposit. The ratio of the number of correctly classified cases (accuracy) is fairly high as well (90.5%). Compared to the decision tree model, the rate of correctly classified positive (sensitivity) is higher, where our model predicts yes 41.9% of the time when a client actually does subscribe.
+
+
+
+### 2nd Random Forest Model
+
+*5 predictors at a time & 800 trees created*
+
+```{r}
+bank_RForest2 = randomForest(y ~ ., data = bank_train_caret, mtry = 5, ntree = 800, na.action = na.omit, importance = TRUE)
+# default to try 5 predictors at a time and create 800 trees
+print(bank_RForest2)
+```
+
+```{r}
+importance(bank_RForest2)
+```
+
+```{r}
+varImpPlot(bank_RForest2)
+```
+
+```{r}
+actual2 <- bank_validate_caret$y 
+bank_predicted2 <- predict(bank_RForest, newdata=bank_validate_caret, type="class") 
+bank_results.matrix.rf2 <- confusionMatrix(bank_predicted2, actual2, positive="yes") 
+print(bank_results.matrix.rf2)
+```
+True positives (TP) = 440
+*440 cases in which we predicted yes (subscribed a term deposit), and the clients did subscribe a term deposit.*
+
+True negatives (TN) = 7,736
+*7,736 cases where we predicted no (did not subscribe a term deposit), and the clients did subscribe a term deposit.*
+
+False positives (FP) = 255 
+*255 cases where we predicted yes (subscribed a term deposit), and the clients did not actually subscribe a term deposit.*
+
+False negatives (FN) = 612 
+*612 cases where we predicted no (did not subscribe a term deposit), and the clients actually did subscribe a term deposit.*
+
+Accuracy = 90.41%
+*Overall, the classifier is correct 90.41% of the time.*
+
+Sensitivity = 41.8%
+*When a client actually did subscribe a term deposit, our model predicts yes (subscribed a term deposit) 41.8% of the time*
+
+Specificity = 96.8%
+*When a client actually did not subscribe a term deposit, our model predicts no (did not subscribe a term deposit) 97% of the time*
+
+The change in the amount of predictors used and trees created from my 1st Random Forest model did not impact the results of my 2nd model. I changed the predictors from three to five and the amount of trees from 500 to 800, however, my confusion matrix results were relatively not affected.
+
+
+
+# Recommendations
+
+I recommend using the Random Forest model to target the bank clients most likely to subscribe a term deposit. This model is valuable in identifying predictors that explain if a bank customer is more likely to subscribe a term deposit. The Random Forest model had the greatest accuracy rate (90.5%) compared to the other models. Random Forest also had a high specificity of 96.8%, demonstrating the effectiveness of this model in predicting when a client does not subscribe a term deposit. Although the sensitivity rate was 42% for Random Forest, it was greater than the other models. It predicts yes 41.9% of the time when a client actually does subscribe a term deposit.
+
+Both the Random Forest, Decision Tree, and logistic regression model identified variables that best explain if a client subscribes a term deposit: contact duration, last contact month of year (model suggests we should contact clients primarily in March), last contact day of the month (model suggests we should contact clients towards the beginning of the month), and previous marketing campaign outcome (suggests contacting clients that had a successful outcome in last marketing campaign).
+
+
+### Brief overview of model results:
+
+Decision Tree -
+Accuracy = 89.8%
+Sensitivity = 35.1%
+Specificity = 97%
+
+
+kNN -
+Accuracy = 89.4%
+Sensitivity = 16.9%
+Specificity = 98.9%
+
+
+Random Forest -
+Accuracy = 90.5%
+Sensitivity = 41.9%
+Specificity = 96.8%
+
+
+Logistic Regression -
+Unfortunately I was not able to validate my model and construct a confusion matrix to determine this model's accuracy, sensitivity and specificity.
+However, the significant variables in predicting if a client subscribes a term deposit are: 
+jobblue-collar, jobhousemaid, jobstudent, educationtertiary, housingyes, loanyes, contactunknown, day, monthaug, monthdec, monthjan, monthjul, monthjun, monthmar, monthmay, monthnov, monthoct, monthsep, duration, campaign, poutcomesuccess
